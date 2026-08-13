@@ -1,54 +1,50 @@
 #!/bin/bash
 # Projet-unifi- Integration Script
-# Integrate all repositories using git subtree
+# Integrate the Nexus repositories using git subtree.
 # Usage: bash setup_integration.sh
 
-set -e
+set -euo pipefail
 
 REPO_URL="https://github.com/Wanderer881101"
-MAIN_REPO="Projet-unifi-"
+
+# Keep the script safe to re-run: add a subtree only when its prefix is absent,
+# otherwise pull the existing subtree. This avoids an add followed immediately
+# by a pull of the same source.
+integrate_subtree() {
+  local prefix="$1"
+  local repository="$2"
+
+  if [ -d "$prefix" ] || git ls-tree -d HEAD -- "$prefix" | grep -q .; then
+    echo "🔄 Updating $prefix from $repository..."
+    git subtree pull --prefix="$prefix" "${REPO_URL}/${repository}.git" main --squash
+  else
+    echo "📦 Adding $prefix from $repository..."
+    git subtree add --prefix="$prefix" "${REPO_URL}/${repository}.git" main --squash
+  fi
+}
 
 echo "🔧 Starting Nexus System Integration..."
 
-# Configure git
 git config user.name "Jonathan Therrien"
 git config user.email "jonathantherrien2021@gmail.com"
 
-# 1. Add Nex-us-V source code
-echo "📦 Integrating Nex-us-V (core)..."
-git subtree add --prefix=src/nexus-core ${REPO_URL}/Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=src/nexus-core ${REPO_URL}/Nex-us-V.git main --squash
+integrate_subtree "src/nexus-core" "Nex-us-V"
+integrate_subtree "src/module" "module"
+integrate_subtree "build/dist" "3-Nex-us-V"
+integrate_subtree "build/lib" "4-Nex-us-V"
+integrate_subtree "build/runtime" "5-Nex-us-V"
+integrate_subtree "build/cache" "6-Nex-us-V"
+integrate_subtree "templates" "2-Nex-us-V"
 
-# 2. Add module protocols
-echo "📦 Integrating module (protocols)..."
-git subtree add --prefix=src/module ${REPO_URL}/module.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=src/module ${REPO_URL}/module.git main --squash
+# 7-Nex-us-V is a template variant. Keep the primary templates subtree intact;
+# merge that repository manually if its files differ and should be preserved.
 
-# 3. Add build artifacts
-echo "📦 Integrating 3-Nex-us-V (dist)..."
-git subtree add --prefix=build/dist ${REPO_URL}/3-Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=build/dist ${REPO_URL}/3-Nex-us-V.git main --squash
+echo "🔎 Validating unified structure..."
+python3 scripts/validate_structure.py
 
-echo "📦 Integrating 4-Nex-us-V (lib)..."
-git subtree add --prefix=build/lib ${REPO_URL}/4-Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=build/lib ${REPO_URL}/4-Nex-us-V.git main --squash
+echo "✅ Integration complete."
 
-echo "📦 Integrating 5-Nex-us-V (runtime)..."
-git subtree add --prefix=build/runtime ${REPO_URL}/5-Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=build/runtime ${REPO_URL}/5-Nex-us-V.git main --squash
-
-echo "📦 Integrating 6-Nex-us-V (cache)..."
-git subtree add --prefix=build/cache ${REPO_URL}/6-Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=build/cache ${REPO_URL}/6-Nex-us-V.git main --squash
-
-# 4. Add templates
-echo "📦 Integrating 2-Nex-us-V & 7-Nex-us-V (templates)..."
-git subtree add --prefix=templates ${REPO_URL}/2-Nex-us-V.git main --squash || echo "Subtree exists, updating..."
-git subtree pull --prefix=templates ${REPO_URL}/2-Nex-us-V.git main --squash
-
-echo "✅ Integration complete!"
-echo "💾 Committing changes..."
 git add .
-git commit -m "feat: Integrate all Nexus repositories via git subtree" || echo "No changes to commit"
+git diff --cached --quiet || git commit -m "feat: integrate Nexus repositories"
 
 echo "🎉 Setup finished successfully!"
